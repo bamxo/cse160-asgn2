@@ -86,6 +86,9 @@ let lastFpsUpdateTime = 0;
 // Zoom level - adjusted to match request
 let zoomLevel = 7.5;
 
+// Cache for uniform locations to avoid redundant lookups
+let uniformLocations = {};
+
 function main() {
   // Initialize canvas and WebGL context
   canvas = document.getElementById("webgl");
@@ -106,6 +109,9 @@ function main() {
   
   // Enable depth test
   gl.enable(gl.DEPTH_TEST);
+  
+  // Cache uniform locations to avoid redundant lookups during rendering
+  cacheUniformLocations();
   
   // Set up event listeners for UI controls
   setupEventListeners();
@@ -130,6 +136,20 @@ function main() {
   
   // Start animation tick
   requestAnimationFrame(tick);
+}
+
+// Cache all uniform locations to avoid redundant lookups
+function cacheUniformLocations() {
+  uniformLocations = {
+    u_ModelMatrix: gl.getUniformLocation(gl.program, 'u_ModelMatrix'),
+    u_GlobalRotationMatrix: gl.getUniformLocation(gl.program, 'u_GlobalRotationMatrix'),
+    u_ViewMatrix: gl.getUniformLocation(gl.program, 'u_ViewMatrix'),
+    u_ProjMatrix: gl.getUniformLocation(gl.program, 'u_ProjMatrix'),
+    u_Color: gl.getUniformLocation(gl.program, 'u_Color'),
+    u_UseLighting: gl.getUniformLocation(gl.program, 'u_UseLighting'),
+    u_LightDirection: gl.getUniformLocation(gl.program, 'u_LightDirection'),
+    u_LightColor: gl.getUniformLocation(gl.program, 'u_LightColor')
+  };
 }
 
 function updateViewMatrix() {
@@ -274,67 +294,57 @@ function createPokeInfoElement() {
 }
 
 function tick(timestamp) {
-  // Calculate FPS
-  frameCount++;
-  const elapsed = timestamp - lastFpsUpdateTime;
-  
-  if (elapsed >= 1000) { // Update FPS every second
-    fps = Math.round(frameCount * 1000 / elapsed);
-    document.getElementById("fpsCounter").textContent = `FPS: ${fps}`;
-    frameCount = 0;
-    lastFpsUpdateTime = timestamp;
-  }
-  
-  // Check if poke animation is active or panda is flipped
-  let shouldRender = false;
-  
-  if (panda.isPoking || panda.isFlipped) {
-    // Always render scene during poke animation or when flipped
-    shouldRender = true;
-  }
-  
-  // Update animation
-  if (animationEnabled) {
-    const deltaTime = timestamp - lastTimestamp;
-    animationAngle += deltaTime * 0.05; // Adjust speed as needed
+  // Calculate time delta and update FPS counter
+  if (lastTimestamp !== 0) {
+    const timeDelta = timestamp - lastTimestamp;
+    fps = 1000 / timeDelta;
     
-    // Apply animation to joint angles with more prominent alternating movement
-    // Left side moves forward while right side moves back
-    const amplitude = 60; // Increased amplitude for more prominent movement
-    const frequency = 0.015; // Adjusted for smoother movement
-    jointAngle1 = amplitude * Math.sin(animationAngle * frequency); // Left side
-    jointAngle2 = -amplitude * Math.sin(animationAngle * frequency); // Right side - opposite phase
+    // Update FPS counter less frequently to avoid excessive DOM updates
+    const currentTime = performance.now();
+    if (currentTime - lastFpsUpdateTime > 500) { // Update every 500ms
+      document.getElementById("fpsCounter").textContent = `FPS: ${fps.toFixed(1)}`;
+      lastFpsUpdateTime = currentTime;
+    }
+  }
+  lastTimestamp = timestamp;
+  
+  // Update animation angles
+  if (animationEnabled) {
+    // Use more performant requestAnimationFrame timestamp instead of Date.now()
+    const animationSpeed = 0.1;
+    animationAngle += animationSpeed;
+    
+    // Calculate joint angles using sin/cos for walking animation
+    jointAngle1 = Math.sin(animationAngle) * 30;
+    jointAngle2 = Math.cos(animationAngle) * 30;
     
     // Add gentle head movement during animation
-    const headAmplitude = 8; // Smaller amplitude for head
-    const headFrequency = 0.01; // Slower frequency for head
-    headAngle = headAmplitude * Math.sin(animationAngle * headFrequency);
+    headAngle = Math.sin(animationAngle * 0.5) * 8;
     
-    // Update UI sliders
+    // Update UI slider values
     document.getElementById("jointAngle1").value = jointAngle1;
     document.getElementById("jointAngle2").value = jointAngle2;
     document.getElementById("headAngle").value = headAngle;
+    document.getElementById("jointAngle1Value").textContent = jointAngle1.toFixed(0) + "°";
+    document.getElementById("jointAngle2Value").textContent = jointAngle2.toFixed(0) + "°";
+    document.getElementById("headAngleValue").textContent = headAngle.toFixed(0) + "°";
     
-    // Update UI text
-    document.getElementById("jointAngle1Value").textContent = Math.round(jointAngle1) + "°";
-    document.getElementById("jointAngle2Value").textContent = Math.round(jointAngle2) + "°";
-    document.getElementById("headAngleValue").textContent = Math.round(headAngle) + "°";
-    
-    shouldRender = true;
-  }
-  
-  // Render the scene if needed
-  if (shouldRender) {
+    // Render the scene with updated animation
     renderScene();
   }
   
-  lastTimestamp = timestamp;
+  // Always render if panda is in special state
+  if (panda.isPoking || panda.isFlipped) {
+    renderScene();
+  }
+  
+  // Continue animation loop
   requestAnimationFrame(tick);
 }
 
 function renderScene() {
-  // Clear the canvas with the specified green background color (#256125)
-  gl.clearColor(0.145, 0.38, 0.145, 1.0); // RGB values for #256125
+  // Clear the canvas and depth buffer
+  gl.clearColor(0.145, 0.38, 0.145, 1.0); // Minecraft-style green background (#256125)
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   
   // Set up matrices
@@ -342,30 +352,19 @@ function renderScene() {
   globalRotationMatrix.rotate(globalRotationY, 1, 0, 0);
   globalRotationMatrix.rotate(globalRotationX, 0, 1, 0);
   
-  // Reset model matrix
+  // Set uniform matrices using cached locations
+  gl.uniformMatrix4fv(uniformLocations.u_GlobalRotationMatrix, false, globalRotationMatrix.elements);
+  gl.uniformMatrix4fv(uniformLocations.u_ViewMatrix, false, viewMatrix.elements);
+  gl.uniformMatrix4fv(uniformLocations.u_ProjMatrix, false, projMatrix.elements);
+  
+  // Set lighting only once per frame
+  gl.uniform1i(uniformLocations.u_UseLighting, true);
+  gl.uniform3f(uniformLocations.u_LightDirection, 0.8, 1.2, 0.6); // Adjusted for Minecraft-style lighting
+  gl.uniform3f(uniformLocations.u_LightColor, 1.0, 1.0, 1.0); // White light
+  
+  // Draw the panda with correct positioning
   modelMatrix.setIdentity();
-  
-  // Translate model to be centered in view
-  modelMatrix.translate(0, -0.5, 0);
-  
-  // Set uniform matrices
-  const u_GlobalRotationMatrix = gl.getUniformLocation(gl.program, "u_GlobalRotationMatrix");
-  const u_ViewMatrix = gl.getUniformLocation(gl.program, "u_ViewMatrix");
-  const u_ProjMatrix = gl.getUniformLocation(gl.program, "u_ProjMatrix");
-  const u_UseLighting = gl.getUniformLocation(gl.program, "u_UseLighting");
-  
-  gl.uniformMatrix4fv(u_GlobalRotationMatrix, false, globalRotationMatrix.elements);
-  gl.uniformMatrix4fv(u_ViewMatrix, false, viewMatrix.elements);
-  gl.uniformMatrix4fv(u_ProjMatrix, false, projMatrix.elements);
-  
-  // Set lighting to match Minecraft panda textures
-  gl.uniform1i(u_UseLighting, true);
-  const u_LightDirection = gl.getUniformLocation(gl.program, "u_LightDirection");
-  const u_LightColor = gl.getUniformLocation(gl.program, "u_LightColor");
-  gl.uniform3f(u_LightDirection, 0.8, 1.2, 0.6); // Adjusted for Minecraft-style flat lighting
-  gl.uniform3f(u_LightColor, 1.0, 1.0, 1.0);     // White light
-  
-  // Render the panda
+  modelMatrix.translate(0, -0.5, 0); // Position panda correctly
   panda.render(gl, modelMatrix, jointAngle1, jointAngle2, headAngle);
 }
 

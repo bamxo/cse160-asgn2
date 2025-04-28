@@ -65,6 +65,7 @@ class Cube {
     ]);
   }
   
+  // Legacy render method - now most rendering is handled by Panda.renderCube
   render(gl, modelMatrix, colorLocation) {
     // Set color uniform
     gl.uniform3fv(colorLocation, this.color);

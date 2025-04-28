@@ -16,6 +16,43 @@ class Panda {
     this.isFlipped = false;
     this.pokeStartTime = 0;
     this.pokeDuration = 1000; // Animation lasts 1 second for transition
+    
+    // Buffer cache for performance optimization
+    this.bufferCache = {
+      cube: null,
+      initialized: false
+    };
+  }
+  
+  // Initialize shared buffers for all cubes
+  initBuffers(gl) {
+    if (this.bufferCache.initialized) return;
+    
+    // Create a standard cube for reference
+    const cube = new Cube(0, 0, 0, 1.0, [1, 1, 1]);
+    
+    // Create and store vertex buffer
+    const vertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, cube.vertices, gl.STATIC_DRAW);
+    
+    // Create and store index buffer
+    const indexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cube.indices, gl.STATIC_DRAW);
+    
+    // Create and store normal buffer
+    const normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, cube.normals, gl.STATIC_DRAW);
+    
+    // Store buffers in cache
+    this.bufferCache = {
+      vertices: vertexBuffer,
+      indices: indexBuffer,
+      normals: normalBuffer,
+      initialized: true
+    };
   }
 
   // Toggle the poke animation
@@ -28,6 +65,9 @@ class Panda {
 
   // Main render function to draw the entire panda
   render(gl, parentMatrix, jointAngle1, jointAngle2, headAngle) {
+    // Initialize buffers if not already done
+    this.initBuffers(gl);
+    
     // Store the color uniform location
     const colorLocation = gl.getUniformLocation(gl.program, "u_Color");
     
@@ -134,6 +174,34 @@ class Panda {
     this.drawLegs(gl, pokeMatrix, colorLocation, legAngle, legAngle);
   }
 
+  // Optimized renderCube method that uses shared buffers
+  renderCube(gl, modelMatrix, color, colorLocation) {
+    // Set color uniform
+    gl.uniform3fv(colorLocation, color);
+    
+    // Set model matrix uniform
+    const u_ModelMatrix = gl.getUniformLocation(gl.program, 'u_ModelMatrix');
+    gl.uniformMatrix4fv(u_ModelMatrix, false, modelMatrix.elements);
+    
+    // Bind pre-stored vertex buffer
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bufferCache.vertices);
+    const a_Position = gl.getAttribLocation(gl.program, 'a_Position');
+    gl.vertexAttribPointer(a_Position, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(a_Position);
+    
+    // Bind pre-stored normal buffer
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bufferCache.normals);
+    const a_Normal = gl.getAttribLocation(gl.program, 'a_Normal');
+    gl.vertexAttribPointer(a_Normal, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(a_Normal);
+    
+    // Bind pre-stored index buffer
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.bufferCache.indices);
+    
+    // Draw the cube
+    gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+  }
+
   // Draw the panda's body
   drawBody(gl, parentMatrix, colorLocation) {
     // Main body - white
@@ -141,63 +209,49 @@ class Panda {
     bodyMatrix.translate(0, 0.3, 0);
     bodyMatrix.scale(1.1, 1.2, 1.8);
     
-    gl.uniform3fv(colorLocation, this.whiteColor);
-    const body = new Cube(0, 0, 0, 1.0, this.whiteColor);
-    body.render(gl, bodyMatrix, colorLocation);
+    this.renderCube(gl, bodyMatrix, this.whiteColor, colorLocation);
 
     // Black left side vertical stripe - slightly protruding from body
     const leftStripeMatrix = new Matrix4(parentMatrix);
     leftStripeMatrix.translate(-0.53, 0.3, 0); 
     leftStripeMatrix.scale(0.15, 1.2, 0.7); // Thinner stripe with less protrusion
     
-    gl.uniform3fv(colorLocation, this.blackColor);
-    const leftStripe = new Cube(0, 0, 0, 1.0, this.blackColor);
-    leftStripe.render(gl, leftStripeMatrix, colorLocation);
+    this.renderCube(gl, leftStripeMatrix, this.blackColor, colorLocation);
     
     // Black right side vertical stripe - slightly protruding from body
     const rightStripeMatrix = new Matrix4(parentMatrix);
     rightStripeMatrix.translate(0.53, 0.3, 0);
     rightStripeMatrix.scale(0.15, 1.2, 0.7); // Thinner stripe with less protrusion
     
-    gl.uniform3fv(colorLocation, this.blackColor);
-    const rightStripe = new Cube(0, 0, 0, 1.0, this.blackColor);
-    rightStripe.render(gl, rightStripeMatrix, colorLocation);
+    this.renderCube(gl, rightStripeMatrix, this.blackColor, colorLocation);
     
     // Black top horizontal stripe - matching protrusion of side stripes
     const topStripeMatrix = new Matrix4(parentMatrix);
     topStripeMatrix.translate(0, 0.86, 0);
     topStripeMatrix.scale(1.1, 0.15, 0.7); // Reduced width to match side protrusion
     
-    gl.uniform3fv(colorLocation, this.blackColor);
-    const topStripe = new Cube(0, 0, 0, 1.0, this.blackColor);
-    topStripe.render(gl, topStripeMatrix, colorLocation);
+    this.renderCube(gl, topStripeMatrix, this.blackColor, colorLocation);
     
     // Add subtle black side panels flush with body to prevent z-fighting
     const leftPanelMatrix = new Matrix4(parentMatrix);
     leftPanelMatrix.translate(-0.56, 0.3, 0); 
     leftPanelMatrix.scale(0.01, 1.2, 0.7); // Very thin panel flush with body side
     
-    gl.uniform3fv(colorLocation, this.blackColor);
-    const leftPanel = new Cube(0, 0, 0, 1.0, this.blackColor);
-    leftPanel.render(gl, leftPanelMatrix, colorLocation);
+    this.renderCube(gl, leftPanelMatrix, this.blackColor, colorLocation);
     
     // Right side panel
     const rightPanelMatrix = new Matrix4(parentMatrix);
     rightPanelMatrix.translate(0.56, 0.3, 0);
     rightPanelMatrix.scale(0.01, 1.2, 0.7); // Very thin panel flush with body side
     
-    gl.uniform3fv(colorLocation, this.blackColor);
-    const rightPanel = new Cube(0, 0, 0, 1.0, this.blackColor);
-    rightPanel.render(gl, rightPanelMatrix, colorLocation);
+    this.renderCube(gl, rightPanelMatrix, this.blackColor, colorLocation);
     
     // Top panel
     const topPanelMatrix = new Matrix4(parentMatrix);
     topPanelMatrix.translate(0, 0.91, 0);
     topPanelMatrix.scale(1.1, 0.01, 0.7); // Very thin panel flush with body top
     
-    gl.uniform3fv(colorLocation, this.blackColor);
-    const topPanel = new Cube(0, 0, 0, 1.0, this.blackColor);
-    topPanel.render(gl, topPanelMatrix, colorLocation);
+    this.renderCube(gl, topPanelMatrix, this.blackColor, colorLocation);
   }
 
   // Draw the panda's head
@@ -208,9 +262,7 @@ class Panda {
     headMatrix.rotate(headAngle, 0, 1, 0); // Add head turn around Y axis
     headMatrix.scale(1.0, 0.8, 0.8);
     
-    gl.uniform3fv(colorLocation, this.whiteColor);
-    const head = new Cube(0, 0, 0, 1.0, this.whiteColor);
-    head.render(gl, headMatrix, colorLocation);
+    this.renderCube(gl, headMatrix, this.whiteColor, colorLocation);
     
     // ======= LEFT EYE - Pixelated Minecraft style =======
     gl.uniform3fv(colorLocation, this.blackColor);
@@ -283,71 +335,57 @@ class Panda {
     leftEarMatrix.translate(-0.5, 0.6, 0.0);
     leftEarMatrix.scale(0.35, 0.45, 0.15);
     
-    gl.uniform3fv(colorLocation, this.blackColor);
-    const leftEar = new Cube(0, 0, 0, 1.0, this.blackColor);
-    leftEar.render(gl, leftEarMatrix, colorLocation);
+    this.renderCube(gl, leftEarMatrix, this.blackColor, colorLocation);
     
     // Right ear
     const rightEarMatrix = new Matrix4(headMatrix);
     rightEarMatrix.translate(0.5, 0.6, 0.0);
     rightEarMatrix.scale(0.35, 0.45, 0.15);
     
-    const rightEar = new Cube(0, 0, 0, 1.0, this.blackColor);
-    rightEar.render(gl, rightEarMatrix, colorLocation);
+    this.renderCube(gl, rightEarMatrix, this.blackColor, colorLocation);
     
     // Muzzle area - white in Minecraft panda
     const muzzleMatrix = new Matrix4(headMatrix);
     muzzleMatrix.translate(0, -0.15, 0.51);
     muzzleMatrix.scale(0.4, 0.2, 0.1);
     
-    gl.uniform3fv(colorLocation, this.whiteColor);
-    const muzzle = new Cube(0, 0, 0, 1.0, this.whiteColor);
-    muzzle.render(gl, muzzleMatrix, colorLocation);
+    this.renderCube(gl, muzzleMatrix, this.whiteColor, colorLocation);
     
     // Black square nose (more prominent)
     const noseMatrix = new Matrix4(headMatrix);
     noseMatrix.translate(0, -0.07, 0.52);
     noseMatrix.scale(0.3, 0.15, 0.1);
     
-    gl.uniform3fv(colorLocation, this.blackColor);
-    const nose = new Cube(0, 0, 0, 1.0, this.blackColor);
-    nose.render(gl, noseMatrix, colorLocation);
+    this.renderCube(gl, noseMatrix, this.blackColor, colorLocation);
     
     // Pink tongue underneath (visible beneath the nose) - Minecraft style
     const tongueMatrix = new Matrix4(headMatrix);
     tongueMatrix.translate(0, -0.25, 0.52);
     tongueMatrix.scale(0.2, 0.15, 0.1);
     
-    gl.uniform3fv(colorLocation, this.pinkColor);
-    const tongue = new Cube(0, 0, 0, 1.0, this.pinkColor);
-    tongue.render(gl, tongueMatrix, colorLocation);
+    this.renderCube(gl, tongueMatrix, this.pinkColor, colorLocation);
   }
 
-  // Helper method to render a pixel at specific position
+  // Helper method to render a single pixel (cube) for the pixelated details
   renderPixel(gl, parentMatrix, x, y, z, size, color, colorLocation) {
     const pixelMatrix = new Matrix4(parentMatrix);
     pixelMatrix.translate(x, y, z);
-    pixelMatrix.scale(size, size, size/3); // Make pixels flatter
+    pixelMatrix.scale(size, size, size/3); // Make pixels flatter like in the original
     
-    gl.uniform3fv(colorLocation, color);
-    const pixel = new Cube(0, 0, 0, 1.0, color);
-    pixel.render(gl, pixelMatrix, colorLocation);
+    this.renderCube(gl, pixelMatrix, color, colorLocation);
   }
 
-  // Draw the panda's legs
+  // Draw the panda's legs with joint animation
   drawLegs(gl, parentMatrix, colorLocation, jointAngle1, jointAngle2) {
-    gl.uniform3fv(colorLocation, this.blackColor);
-    
     // Front legs (black)
     // Left front leg
     const leftFrontLegMatrix = new Matrix4(parentMatrix);
     leftFrontLegMatrix.translate(-0.3, -0.2, 0.6); // Higher pivot point
-    leftFrontLegMatrix.rotate(jointAngle1 * 0.8, 1, 0, 0); // Quick but less extreme rotation
+    leftFrontLegMatrix.rotate(-jointAngle1 * 0.8, 1, 0, 0); // Quick but less extreme rotation
     leftFrontLegMatrix.translate(0, -0.3, 0); // Offset to keep leg length but change pivot
     leftFrontLegMatrix.scale(0.4, 0.7, 0.4); // Slightly shorter to prevent protrusion
     
-    const leftFrontLeg = new Cube(0, 0, 0, 1.0, this.blackColor);
-    leftFrontLeg.render(gl, leftFrontLegMatrix, colorLocation);
+    this.renderCube(gl, leftFrontLegMatrix, this.blackColor, colorLocation);
     
     // Right front leg
     const rightFrontLegMatrix = new Matrix4(parentMatrix);
@@ -356,8 +394,7 @@ class Panda {
     rightFrontLegMatrix.translate(0, -0.3, 0); // Offset to keep leg length but change pivot
     rightFrontLegMatrix.scale(0.4, 0.7, 0.4); // Slightly shorter to prevent protrusion
     
-    const rightFrontLeg = new Cube(0, 0, 0, 1.0, this.blackColor);
-    rightFrontLeg.render(gl, rightFrontLegMatrix, colorLocation);
+    this.renderCube(gl, rightFrontLegMatrix, this.blackColor, colorLocation);
     
     // Back legs (black)
     // Left back leg
@@ -367,17 +404,15 @@ class Panda {
     leftBackLegMatrix.translate(0, -0.3, 0); // Offset to keep leg length but change pivot
     leftBackLegMatrix.scale(0.4, 0.7, 0.4); // Slightly shorter to prevent protrusion
     
-    const leftBackLeg = new Cube(0, 0, 0, 1.0, this.blackColor);
-    leftBackLeg.render(gl, leftBackLegMatrix, colorLocation);
+    this.renderCube(gl, leftBackLegMatrix, this.blackColor, colorLocation);
     
     // Right back leg
     const rightBackLegMatrix = new Matrix4(parentMatrix);
-    rightBackLegMatrix.translate(0.3, -0.2, -0.6); // Higher pivot point
-    rightBackLegMatrix.rotate(jointAngle1 * 0.8, 1, 0, 0); // Quick but less extreme rotation
+    rightBackLegMatrix.translate(0.3, -0.2, -0.6); // Higher pivot point 
+    rightBackLegMatrix.rotate(-jointAngle1 * 0.8, 1, 0, 0); // Quick but less extreme rotation
     rightBackLegMatrix.translate(0, -0.3, 0); // Offset to keep leg length but change pivot
     rightBackLegMatrix.scale(0.4, 0.7, 0.4); // Slightly shorter to prevent protrusion
     
-    const rightBackLeg = new Cube(0, 0, 0, 1.0, this.blackColor);
-    rightBackLeg.render(gl, rightBackLegMatrix, colorLocation);
+    this.renderCube(gl, rightBackLegMatrix, this.blackColor, colorLocation);
   }
 } 
