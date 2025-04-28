@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assignment 2 - 3D Panda</title>
+  <script src="lib/webgl-utils.js"></script>
+  <script src="lib/webgl-debug.js"></script>
+  <script src="lib/cuon-utils.js"></script>
+  <script src="lib/cuon-matrix.js"></script>
+  <script src="js/point.js"></script>
+  <script src="js/circle.js"></script>
+  <script src="js/cube.js"></script>
+  <script src="js/triangle.js"></script>
+  <script src="js/panda.js"></script>
+  <script src="panda.js"></script>
+  <style>
+    .main-container {
+      display: flex;
+      flex-direction: row;
+    }
+    
+    .canvas-container {
+      position: relative;
+    }
+    
+    #fpsCounter {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+    
+    .control-panel {
+      margin-left: 20px;
+    }
+  </style>
+</head>
+<body onload="main()">
+  <div class="main-container">
+    <div class="canvas-container">
+      <canvas id="webgl" width="600" height="600">
+        Please use a browser that supports Canvas
+      </canvas>
+      <div id="fpsCounter">FPS: 0</div>
+    </div>
+
+    <div class="control-panel">
+      <div class="control-group">
+        <h3>Global Rotation</h3>
+        <div class="slider-container">
+          <label for="globalRotationX">Y Rotation: <span id="globalRotationXValue" class="angle-value">0°</span></label>
+          <input type="range" id="globalRotationX" min="-180" max="180" value="0" step="1">
+        </div>
+        <div class="slider-container">
+          <label for="globalRotationY">X Rotation: <span id="globalRotationYValue" class="angle-value">0°</span></label>
+          <input type="range" id="globalRotationY" min="-180" max="180" value="0" step="1">
+        </div>
+        <div class="slider-container">
+          <label for="zoomControl">Zoom: <span id="zoomValue" class="angle-value">5.0</span></label>
+          <input type="range" id="zoomControl" min="1" max="15" value="5" step="0.1">
+        </div>
+      </div>
+
+      <div class="control-group">
+        <h3>Joint Controls</h3>
+        <div class="slider-container">
+          <label for="jointAngle1">Legs 1 & 4: <span id="jointAngle1Value" class="angle-value">0°</span></label>
+          <input type="range" id="jointAngle1" min="-90" max="90" value="0" step="1">
+        </div>
+        <div class="slider-container">
+          <label for="jointAngle2">Legs 2 & 3: <span id="jointAngle2Value" class="angle-value">0°</span></label>
+          <input type="range" id="jointAngle2" min="-90" max="90" value="0" step="1">
+        </div>
+        <div class="slider-container">
+          <label for="headAngle">Head Movement: <span id="headAngleValue" class="angle-value">0°</span></label>
+          <input type="range" id="headAngle" min="-45" max="45" value="0" step="1">
+        </div>
+      </div>
+
+      <div class="control-group">
+        <h3>Animation</h3>
+        <button id="toggleAnimation">Start Animation</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
